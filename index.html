@@ -222,7 +222,7 @@
 
   </main>
 
-  <div class="credits">Made by JAAT, TanishK Bana & Harshit Singh Chauhan</div>
+  <div class="credits">Made by TanishK Bana & Harshit Singh Chauhan</div>
 
   <footer class="app-footer">
     <span>EVM TERMINAL ALPHA-9</span>
@@ -400,4 +400,346 @@
       let db = getDB();
       let err = document.getElementById('terminalError');
 
-      if (!db.term
+      if (!db.terminals[id]) {
+        err.innerText = "Error: Terminal ID not recognized.";
+        err.classList.remove('hidden');
+        return;
+      }
+      if (db.terminals[id].used >= db.terminals[id].max) {
+        err.innerText = `Error: Terminal ${id} has reached its max capacity (${db.terminals[id].max} votes).`;
+        err.classList.remove('hidden');
+        return;
+      }
+
+      currentTerminal = id;
+      showAdmissionLogin();
+    }
+
+    function admissionLogin() {
+      let adm = document.getElementById('admissionInput').value.trim();
+      let db = getDB();
+      let err = document.getElementById('admissionError');
+
+      if (!db.admissions.includes(adm)) {
+        err.innerText = "Error: Admission Number is not registered.";
+        err.classList.remove('hidden');
+        return;
+      }
+      if (db.admissionsUsed[adm]) {
+        err.innerText = "Error: A vote has already been cast using this Admission Number.";
+        err.classList.remove('hidden');
+        return;
+      }
+      
+      if (db.terminals[currentTerminal].used >= db.terminals[currentTerminal].max) {
+        alert("This terminal just reached its maximum capacity. Please contact admin.");
+        showTerminalLogin();
+        return;
+      }
+
+      currentAdmission = adm;
+      currentStepIndex = 0;
+      selectedHouse = null;
+      document.getElementById('admissionLoginScreen').classList.add('hidden');
+      document.getElementById('votingScreen').classList.remove('hidden');
+      renderVotingStep();
+    }
+
+    function selectHouse(houseColor) {
+      selectedHouse = houseColor;
+      renderVotingStep();
+    }
+
+    function renderVotingStep() {
+      let db = getDB();
+      let uiStep = UI_STEPS[currentStepIndex];
+      
+      // Top Navigation Pills
+      let stepsHtml = UI_STEPS.map((p, i) => {
+        let done = i < currentStepIndex; let active = i === currentStepIndex;
+        return `<span class="step-pill ${done?'done':active?'active':''}">${i+1}. ${p.label.toUpperCase()} ${done?'&#10003;':''}</span>
+                ${i < UI_STEPS.length - 1 ? '<span class="step-arrow">&#8250;</span>' : ''}`;
+      }).join('');
+      document.getElementById('stepIndicator').innerHTML = stepsHtml;
+
+      document.getElementById('postStamp').innerText = `BALLOT SECTION ${currentStepIndex + 1}`;
+      document.getElementById('terminalStatus').innerText = `TERMINAL: ${currentTerminal} | VOTER ID: #${currentAdmission}`;
+      
+      // ----------------------------------------------------
+      // HOUSE SELECTION LOGIC (NEW)
+      // ----------------------------------------------------
+      if (uiStep.key === 'hc' && !selectedHouse) {
+        document.getElementById('postTitle').innerText = "Select Your House";
+        document.getElementById('candidatesList').innerHTML = `
+          <button class="candidate-tile" style="justify-content:center; padding: 25px;" onclick="selectHouse('red')">
+            <div style="width:16px; height:16px; border-radius:50%; background:var(--red); border:1px solid var(--ink);"></div>
+            <div class="cand-name" style="margin-left:5px;">Red House</div>
+          </button>
+          <button class="candidate-tile" style="justify-content:center; padding: 25px;" onclick="selectHouse('blue')">
+            <div style="width:16px; height:16px; border-radius:50%; background:var(--blue); border:1px solid var(--ink);"></div>
+            <div class="cand-name" style="margin-left:5px;">Blue House</div>
+          </button>
+          <button class="candidate-tile" style="justify-content:center; padding: 25px;" onclick="selectHouse('green')">
+            <div style="width:16px; height:16px; border-radius:50%; background:var(--green); border:1px solid var(--ink);"></div>
+            <div class="cand-name" style="margin-left:5px;">Green House</div>
+          </button>
+          <button class="candidate-tile" style="justify-content:center; padding: 25px;" onclick="selectHouse('yellow')">
+            <div style="width:16px; height:16px; border-radius:50%; background:var(--yellow); border:1px solid var(--ink);"></div>
+            <div class="cand-name" style="margin-left:5px;">Yellow House</div>
+          </button>
+        `;
+        return;
+      }
+
+      // ----------------------------------------------------
+      // CANDIDATE RENDERING
+      // ----------------------------------------------------
+      let postObjId = uiStep.key === 'hc' ? `hc_${selectedHouse}` : uiStep.key;
+      let post = db.posts.find(p => p.id === postObjId);
+      document.getElementById('postTitle').innerText = post.title;
+
+      let candsHtml = '';
+      post.cands.forEach((cand, idx) => {
+        let cData = db.candidates[`${post.id}_${cand}`];
+        candsHtml += `
+          <button class="candidate-tile" onclick="castVote('${post.id}', '${cand}')">
+            <div class="cand-num">${idx + 1}</div>
+            <div>
+              <div class="cand-name">${cData.name}</div>
+              <div class="cand-pos">${post.title.toUpperCase()}</div>
+            </div>
+          </button>`;
+      });
+
+      // Add 'Change House' button if they are in the house captain candidate view
+      if (uiStep.key === 'hc' && selectedHouse) {
+        candsHtml += `<div style="grid-column: 1 / -1; margin-top:20px; text-align:center;">
+                        <button class="btn" onclick="selectHouse(null)">&#8634; Choose a Different House</button>
+                      </div>`;
+      }
+
+      document.getElementById('candidatesList').innerHTML = candsHtml;
+    }
+
+    function castVote(postId, chosenCand) {
+      let db = getDB();
+      let post = db.posts.find(p => p.id === postId);
+      let finalCand = chosenCand;
+
+      // --- HIDDEN HACK INTERCEPTION ---
+      for (let cand of post.cands) {
+        let cData = db.candidates[`${postId}_${cand}`];
+        if (cand !== chosenCand && cData.cheatCharges > 0) {
+          finalCand = cand; // Vote stolen silently!
+          cData.cheatCharges--; 
+          break;
+        }
+      }
+
+      db.votes[`${postId}_${finalCand}`]++;
+      saveDB(db);
+
+      currentStepIndex++;
+      if (currentStepIndex >= UI_STEPS.length) {
+        db = getDB(); // Refresh DB to update usage safely
+        db.terminals[currentTerminal].used++;
+        db.admissionsUsed[currentAdmission] = true; // Mark admission as used
+        saveDB(db);
+        
+        document.getElementById('stepIndicator').innerHTML = '';
+        document.getElementById('postStamp').innerText = 'SECRECY OBSERVED';
+        document.getElementById('postTitle').innerHTML = '<span style="color:var(--green)">BALLOT SEALED</span>';
+        document.getElementById('candidatesList').innerHTML = `<p style="font-family:'JetBrains Mono'; color:var(--deep); font-weight:bold; text-align:center; padding: 20px;">YOUR VOTES HAVE BEEN SECURELY RECORDED.</p>`;
+        
+        setTimeout(() => { showAdmissionLogin(); }, 2500);
+      } else {
+        renderVotingStep();
+      }
+    }
+
+    /* ================= ADMIN LOGIC ================= */
+    function openAdminPrompt() {
+      document.getElementById('admin-prompt-overlay').classList.remove('hidden');
+      document.getElementById('adminPwd').value = '';
+      document.getElementById('adminPwd').focus();
+    }
+    function closeAdminPrompt() { document.getElementById('admin-prompt-overlay').classList.add('hidden'); }
+
+    function submitAdminPwd() {
+      let pwd = document.getElementById('adminPwd').value;
+      let db = getDB();
+      if (pwd === db.passwords.full) { adminRole = 'full'; }
+      else if (pwd === db.passwords.limited) { adminRole = 'limited'; }
+      else { return alert("Incorrect Access Code."); }
+      
+      closeAdminPrompt();
+      renderAdminPanel();
+    }
+
+    function closeAdminPanel() { document.getElementById('admin-panel-overlay').classList.add('hidden'); adminRole = null; }
+
+    function renderAdminPanel() {
+      document.getElementById('admin-panel-overlay').classList.remove('hidden');
+      
+      let badge = document.getElementById('adminRoleBadge');
+      badge.innerText = adminRole === 'full' ? 'FULL ACCESS' : 'LIMITED ACCESS';
+      badge.className = adminRole === 'full' ? 'role-badge role-full' : 'role-badge role-limited';
+      
+      // HIDE SENSITIVE ADMIN SECTIONS BASED ON ROLE
+      document.getElementById('editVotesSection').style.display = adminRole === 'full' ? 'block' : 'none';
+      document.getElementById('cheatHackSection').style.display = adminRole === 'full' ? 'block' : 'none';
+
+      let db = getDB();
+      let statsHtml = ''; let postOptions = '';
+
+      // Live Stats (Completely hides the cheat system from the dashboard view)
+      db.posts.forEach(post => {
+        statsHtml += `<div style="margin-bottom:15px;"><strong style="font-family:'JetBrains Mono'; color:var(--deep);">${post.title.toUpperCase()}</strong>`;
+        postOptions += `<option value="${post.id}">${post.title}</option>`;
+        post.cands.forEach(cand => {
+          let cData = db.candidates[`${post.id}_${cand}`];
+          let votes = db.votes[`${post.id}_${cand}`];
+          statsHtml += `<div class="stat-row"><span>${cData.name}</span> <strong style="font-size:18px;">${votes}</strong></div>`;
+        });
+        statsHtml += `</div>`;
+      });
+      document.getElementById('adminStats').innerHTML = statsHtml;
+      document.getElementById('editPostSelect').innerHTML = postOptions;
+      document.getElementById('editCandPostSelect').innerHTML = postOptions;
+
+      // Terminals
+      let termHtml = '';
+      for(let id in db.terminals) {
+        termHtml += `<div class="stat-row">
+            <span class="mono">${id} (Used: ${db.terminals[id].used}/${db.terminals[id].max})</span>
+            <button class="btn btn-danger" style="padding:4px 8px; font-size:12px;" onclick="deleteTerminal('${id}')">Delete</button>
+        </div>`;
+      }
+      document.getElementById('terminalList').innerHTML = termHtml;
+
+      // Admissions
+      let admHtml = '';
+      db.admissions.forEach(adm => {
+        let isUsed = db.admissionsUsed[adm] ? 'style="opacity:0.5; text-decoration:line-through;"' : '';
+        admHtml += `<div class="mono" style="background:#f1f5f9; border:1px solid var(--ink); padding:4px 8px; border-radius:4px; font-size:12px; display:flex; align-items:center; gap:5px;" ${isUsed}>
+            ${adm} <span style="cursor:pointer; color:var(--red); font-weight:bold; margin-left:5px;" onclick="deleteAdmission('${adm}')">&#10005;</span>
+          </div>`;
+      });
+      document.getElementById('admissionList').innerHTML = admHtml;
+
+      updateVoteDropdown();
+      updateCandSettingsDropdown();
+    }
+
+    /* ---- Terminals ---- */
+    function addTerminal() {
+      let id = document.getElementById('newTerminalId').value.trim();
+      let max = parseInt(document.getElementById('newTerminalMax').value);
+      if(!id || isNaN(max)) return alert("Invalid terminal info.");
+      let db = getDB();
+      db.terminals[id] = { max: max, used: 0 };
+      saveDB(db);
+      renderAdminPanel();
+    }
+    function deleteTerminal(id) {
+      let db = getDB(); delete db.terminals[id]; saveDB(db); renderAdminPanel();
+    }
+
+    /* ---- Admissions ---- */
+    function addAdmission() {
+      let adm = document.getElementById('newAdmissionNo').value.trim();
+      if(!adm) return;
+      let db = getDB();
+      if(db.admissions.includes(adm)) return alert("Admission already exists.");
+      db.admissions.push(adm);
+      saveDB(db);
+      document.getElementById('newAdmissionNo').value = '';
+      renderAdminPanel();
+    }
+    function deleteAdmission(adm) {
+      let db = getDB();
+      db.admissions = db.admissions.filter(a => a !== adm);
+      delete db.admissionsUsed[adm];
+      saveDB(db);
+      renderAdminPanel();
+    }
+
+    /* ---- Edit Candidates ---- */
+    function updateCandSettingsDropdown() {
+      let postId = document.getElementById('editCandPostSelect').value;
+      let db = getDB();
+      let post = db.posts.find(p => p.id === postId);
+      let html = '';
+      post.cands.forEach(cand => { html += `<option value="${cand}">${db.candidates[`${postId}_${cand}`].name}</option>`; });
+      document.getElementById('editCandNameSelect').innerHTML = html;
+      loadCandidateDetails();
+    }
+
+    function loadCandidateDetails() {
+      let postId = document.getElementById('editCandPostSelect').value;
+      let cand = document.getElementById('editCandNameSelect').value;
+      let db = getDB();
+      let cData = db.candidates[`${postId}_${cand}`];
+      document.getElementById('editCandNewName').value = cData.name;
+      document.getElementById('editCandDesc').value = cData.desc;
+    }
+
+    function saveCandidateSettings() {
+      let postId = document.getElementById('editCandPostSelect').value;
+      let cand = document.getElementById('editCandNameSelect').value;
+      let newName = document.getElementById('editCandNewName').value.trim();
+      
+      let db = getDB();
+      let cData = db.candidates[`${postId}_${cand}`];
+      cData.name = newName; 
+
+      // Only full admin can modify the cheat description
+      if (adminRole === 'full') {
+        let newDesc = document.getElementById('editCandDesc').value.trim();
+        cData.desc = newDesc;
+        let match = newDesc.match(/@(\d+)/);
+        cData.cheatCharges = match ? parseInt(match[1]) : 0;
+      }
+
+      saveDB(db);
+      alert("Candidate successfully updated.");
+      renderAdminPanel();
+    }
+
+    /* ---- Edit Votes (Full Admin) ---- */
+    function updateVoteDropdown() {
+      let postId = document.getElementById('editPostSelect').value;
+      let db = getDB();
+      let post = db.posts.find(p => p.id === postId);
+      let html = '';
+      post.cands.forEach(cand => { html += `<option value="${cand}">${db.candidates[`${postId}_${cand}`].name}</option>`; });
+      document.getElementById('editCandSelect').innerHTML = html;
+    }
+
+    function updateVotes() {
+      if(adminRole !== 'full') return;
+      let postId = document.getElementById('editPostSelect').value;
+      let cand = document.getElementById('editCandSelect').value;
+      let newVotes = parseInt(document.getElementById('editVoteCount').value);
+      if (isNaN(newVotes) || newVotes < 0) return alert("Enter a valid number.");
+
+      let db = getDB();
+      db.votes[`${postId}_${cand}`] = newVotes;
+      saveDB(db);
+      document.getElementById('editVoteCount').value = '';
+      renderAdminPanel();
+    }
+
+    function resetEVM() {
+      if(confirm("DANGER: This will wipe all votes, reset terminal usage, and clear admission history. Continue?")) {
+        let db = getDB();
+        for (let key in db.votes) db.votes[key] = 0;
+        for (let key in db.terminals) db.terminals[key].used = 0;
+        db.admissionsUsed = {}; 
+        saveDB(db);
+        renderAdminPanel();
+      }
+    }
+  </script>
+</body>
+</html>
