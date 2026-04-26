@@ -1,0 +1,403 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Council Elections EVM — Master Control</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Bitter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+  <style>
+    /* ===== VINTAGE PARCHMENT DESIGN TOKENS ===== */
+    :root {
+      --ink:     #0b1d2a;
+      --paper:   #f5efe2;
+      --paper2:  #ece4cf;
+      --saffron: #d97706;
+      --deep:    #052e2b;
+      --green:   #0f6b54;
+      --red:     #b91c1c;
+      --blue:    #1d4ed8;
+      --yellow:  #eab308;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      min-height: 100vh;
+      background:
+        radial-gradient(1200px 600px at 10% -10%, rgba(217,119,6,.08), transparent 60%),
+        radial-gradient(1000px 500px at 100% 110%, rgba(15,107,84,.08), transparent 60%),
+        var(--paper);
+      color: var(--ink);
+      font-family: "Bitter", Georgia, serif;
+      line-height: 1.5;
+      display: flex;
+      flex-direction: column;
+    }
+    input, textarea, button, select { font-family: inherit; }
+    input[type="text"], input[type="password"], input[type="number"], textarea, select {
+      font-family: "JetBrains Mono", monospace;
+    }
+
+    /* ===== LAYOUT & TYPOGRAPHY ===== */
+    #mainArea { flex: 1; display: flex; flex-direction: column; justify-content: center; width: 100%; max-width: 960px; margin: 0 auto; padding: 32px 20px; }
+    .mono { font-family: "JetBrains Mono", monospace; letter-spacing: .04em; }
+    .stamp {
+      display: inline-flex; align-items: center; gap: .4rem;
+      border: 1.5px dashed var(--deep); padding: 3px 10px; border-radius: 999px;
+      font-family: "JetBrains Mono", monospace; font-size: 11px;
+      letter-spacing: .16em; text-transform: uppercase; color: var(--deep);
+      background: rgba(255,255,255,.4);
+    }
+    .label-xs { font-family: "JetBrains Mono", monospace; font-size: 10px; letter-spacing: .12em; text-transform: uppercase; }
+
+    /* ===== CARDS & BUTTONS ===== */
+    .card { background: var(--paper2); border: 1.5px solid var(--ink); box-shadow: 6px 6px 0 var(--ink); border-radius: 6px; }
+    .card-soft { background: #fff; border: 1.5px solid var(--ink); border-radius: 6px; }
+    
+    .btn {
+      font-family: "Bitter", serif; font-weight: 600; cursor: pointer;
+      border: 1.5px solid var(--ink); background: #fff; color: var(--ink);
+      border-radius: 6px; padding: 10px 18px; display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+      transition: transform .14s, box-shadow .14s;
+      box-shadow: 3px 3px 0 var(--ink);
+    }
+    .btn:hover  { transform: translate(-1px,-1px); box-shadow: 4px 4px 0 var(--ink); }
+    .btn:active { transform: translate(2px,2px);   box-shadow: 1px 1px 0 var(--ink); }
+    .btn-primary { background: var(--deep); color: var(--paper); border-color: var(--deep); }
+    .btn-saffron { background: var(--saffron); color: #fff; border-color: var(--saffron); }
+    .btn-danger  { background: var(--red); color: #fff; border-color: var(--red); }
+
+    .divider { height: 1.5px; border: none; margin: 18px 0; background-image: repeating-linear-gradient(90deg, var(--ink) 0 8px, transparent 8px 16px); }
+
+    /* ===== HEADER ===== */
+    #app-header { border-bottom: 1.5px solid var(--ink); background: var(--paper2); position: sticky; top: 0; z-index: 50; width: 100%; }
+    #app-header .inner { max-width: 960px; margin: 0 auto; padding: 14px 20px; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+    .header-left { display: flex; align-items: center; gap: 12px; }
+    .vote-icon { width: 48px; height: 48px; border-radius: 6px; border: 1.5px solid var(--ink); background: var(--deep); color: var(--paper); display: flex; align-items: center; justify-content: center; font-size: 22px; }
+    .header-title { font-size: clamp(14px, 2.5vw, 20px); font-weight: 800; line-height: 1.2; margin-top: 4px; }
+    @keyframes pulse-dot { 0%,100%{opacity:1} 50%{opacity:.3} }
+    .live-dot { width: 8px; height: 8px; background: var(--red); border-radius: 50%; animation: pulse-dot 1.4s infinite; display: inline-block; }
+
+    /* ===== LOGIN SCREENS ===== */
+    .login-grid { display: grid; grid-template-columns: 1fr; gap: 24px; }
+    @media(min-width:768px){ .login-grid { grid-template-columns: 1.2fr 1fr; } }
+    .login-left { padding: 36px 40px; }
+    .ballot-title { font-size: clamp(38px,5vw,60px); font-weight: 800; line-height: 1.05; margin: 12px 0; }
+    .login-right { padding: 36px 40px; display: flex; flex-direction: column; justify-content: center; }
+    .evm-input { width: 100%; border: 1.5px solid var(--ink); border-radius: 6px; padding: 12px 16px; font-size: 16px; outline: none; transition: box-shadow .14s; background: #fff; }
+    .evm-input:focus { box-shadow: 3px 3px 0 var(--ink); }
+
+    /* ===== VOTING FLOW ===== */
+    .steps { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 24px; }
+    .step-pill { display: inline-flex; align-items: center; gap: 4px; font-family: "JetBrains Mono", monospace; font-size: 10px; letter-spacing: .1em; text-transform: uppercase; padding: 5px 12px; border-radius: 999px; border: 1.5px solid var(--ink); background: #fff; }
+    .step-pill.done   { background: var(--deep); color: var(--paper); }
+    .step-pill.active { background: var(--saffron); color: #fff; }
+    .step-arrow { opacity: .4; font-size: 14px; }
+    
+    .cands-grid { display: grid; grid-template-columns: 1fr; gap: 14px; margin-top: 20px; }
+    @media(min-width:640px)  { .cands-grid { grid-template-columns: repeat(2,1fr); } }
+    
+    .candidate-tile { background: #fff; border: 1.5px solid var(--ink); border-radius: 6px; padding: 16px 18px; display: flex; align-items: center; gap: 14px; cursor: pointer; transition: transform .14s, box-shadow .14s; box-shadow: 4px 4px 0 var(--ink); text-align: left; width: 100%; }
+    .candidate-tile:hover  { transform: translate(-2px,-2px); box-shadow: 6px 6px 0 var(--ink); }
+    .candidate-tile:active { transform: translate(2px,2px);   box-shadow: 1px 1px 0 var(--ink); }
+    .cand-num { width: 44px; height: 44px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; border: 1.5px solid var(--ink); background: var(--paper2); border-radius: 4px; font-family: "JetBrains Mono", monospace; font-weight: 700; font-size: 18px; }
+    .cand-name { font-size: 18px; font-weight: 700; line-height: 1.2; }
+    .cand-pos  { font-family: "JetBrains Mono", monospace; font-size: 10px; letter-spacing: .1em; text-transform: uppercase; color: var(--deep); opacity: .7; margin-top: 3px; }
+
+    /* ===== OVERLAYS & ADMIN PANEL ===== */
+    .overlay-bg { position: fixed; inset: 0; background: rgba(11,29,42,.7); display: flex; align-items: center; justify-content: center; padding: 16px; z-index: 200; }
+    .prompt-box { background: var(--paper2); border: 1.5px solid var(--ink); box-shadow: 6px 6px 0 var(--ink); border-radius: 8px; padding: 28px; width: 100%; max-width: 400px; }
+    
+    .panel-overlay { position: fixed; inset: 0; background: rgba(11,29,42,.7); display: flex; align-items: flex-start; justify-content: center; overflow-y: auto; padding: 16px; z-index: 200; }
+    .panel-box { background: var(--paper2); border: 1.5px solid var(--ink); box-shadow: 6px 6px 0 var(--ink); border-radius: 8px; width: 100%; max-width: 900px; padding: 24px; position: relative; margin: auto; }
+    .panel-sticky-header { position: sticky; top: -16px; background: var(--paper2); border-bottom: 1.5px solid var(--ink); margin: -24px -24px 20px; padding: 16px 24px; display: flex; align-items: center; justify-content: space-between; z-index: 10; border-radius: 8px 8px 0 0; }
+    
+    .role-badge { font-family: "JetBrains Mono"; font-size: 11px; padding: 3px 8px; border-radius: 4px; border: 1.5px solid var(--ink); margin-left: 10px; }
+    .role-full { background: var(--deep); color: white; }
+    .role-limited { background: var(--saffron); color: white; }
+
+    .admin-section { background: #fff; border: 1.5px solid var(--ink); border-radius: 6px; padding: 20px; margin-bottom: 20px; }
+    .admin-section h3 { font-size: 18px; font-weight: 800; margin-bottom: 15px; border-bottom: 1px dashed var(--ink); padding-bottom: 5px; }
+    .stat-row { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid #eee; }
+    
+    .credits { text-align: center; font-family: "JetBrains Mono", monospace; font-size: 10px; color: var(--deep); opacity: 0.6; padding: 10px; font-weight: 600; letter-spacing: 0.5px;}
+    .hidden { display: none !important; }
+    .flex-row { display: flex; gap: 10px; flex-wrap: wrap;}
+
+    /* ===== OFFICIAL BOTTOM FOOTER ===== */
+    .app-footer {
+        width: 100%;
+        padding: 15px 20px;
+        background: #e8e2d2;
+        border-top: 1.5px solid var(--ink);
+        display: flex;
+        justify-content: center;
+        gap: 15px;
+        font-family: "JetBrains Mono", monospace;
+        font-size: 11px;
+        letter-spacing: 0.15em;
+        color: var(--deep);
+        opacity: 0.8;
+        margin-top: auto;
+        flex-wrap: wrap;
+    }
+  </style>
+</head>
+<body>
+
+  <header id="app-header">
+    <div class="inner">
+      <div class="header-left">
+        <div class="vote-icon">&#9745;</div>
+        <div>
+          <div class="stamp"><span class="live-dot"></span> POLLING UNIT #01</div>
+          <div class="header-title">Council Elections 2026-27</div>
+        </div>
+      </div>
+      <div style="display:flex; gap:10px;">
+        <button id="exit-btn" class="btn hidden" onclick="showTerminalLogin()">&#8634; Swap Terminal</button>
+        <button class="btn btn-primary" onclick="openAdminPrompt()">&#128274; ADMIN</button>
+      </div>
+    </div>
+  </header>
+
+  <main id="mainArea">
+    
+    <div class="login-grid" id="terminalLoginScreen">
+      <div class="card login-left">
+        <div class="stamp mb-2" style="margin-bottom:15px;">OFFICIAL GAZETTE</div>
+        <div class="ballot-title text-saffron" style="color: var(--saffron);">Narayana E Techno<br><span style="color:var(--ink);">Council Ballot</span></div>
+        <p style="font-size:15px; font-style:italic; margin-top:15px; color:var(--deep);">"The right to choose your representative is the foundation of progress. Vote with integrity."</p>
+        <hr class="divider" />
+        <div class="mono text-xs" style="display:flex; justify-content:space-between; opacity:0.7;">
+          <span>OFFICER: NETS-AJM</span>
+          <span>BATCH: 26-27/A</span>
+        </div>
+      </div>
+
+      <div class="card-soft login-right">
+        <div style="display:flex; align-items:center; gap:8px; margin-bottom:20px; opacity:0.6;">
+          <span>&#128187;</span><span class="label-xs">SYSTEM INITIALIZATION</span>
+        </div>
+        <label class="label-xs" style="display:block; margin-bottom:8px;">TERMINAL / PC ID</label>
+        <input type="text" id="computerIdInput" placeholder="e.g. PC-1" class="evm-input" onkeydown="if(event.key==='Enter') terminalLogin()" />
+        <button class="btn btn-primary w-full" style="width:100%; margin-top:20px; font-size:18px; padding:15px;" onclick="terminalLogin()">Activate Terminal</button>
+        <p id="terminalError" style="color: var(--red); margin-top: 15px; font-size: 13px; font-weight:bold; text-align:center;" class="hidden"></p>
+      </div>
+    </div>
+
+    <div class="login-grid hidden" id="admissionLoginScreen">
+      <div class="card login-left">
+        <div class="stamp mb-2" style="margin-bottom:15px;" id="activeTerminalStamp">TERMINAL ACTIVE</div>
+        <div class="ballot-title text-saffron" style="color: var(--saffron);">Identity<br><span style="color:var(--ink);">Verification</span></div>
+        <p style="font-size:15px; margin-top:15px; color:var(--deep);">Please verify your student admission number to proceed to the ballot.</p>
+        <hr class="divider" />
+        <div class="mono text-xs" style="opacity:0.7;">
+          <span>ONE VOTE PER ADMISSION GRANTED.</span>
+        </div>
+      </div>
+
+      <div class="card-soft login-right">
+        <div style="display:flex; align-items:center; gap:8px; margin-bottom:20px; opacity:0.6;">
+          <span>&#128196;</span><span class="label-xs">IDENTITY AUTHENTICATION REQUIRED</span>
+        </div>
+        <label class="label-xs" style="display:block; margin-bottom:8px;">ADMISSION NO.</label>
+        <input type="number" id="admissionInput" placeholder="e.g. 2025001" class="evm-input" onkeydown="if(event.key==='Enter') admissionLogin()" />
+        <button class="btn btn-primary w-full" style="width:100%; margin-top:20px; font-size:18px; padding:15px;" onclick="admissionLogin()">Initiate Voting Protocol</button>
+        <p id="admissionError" style="color: var(--red); margin-top: 15px; font-size: 13px; font-weight:bold; text-align:center;" class="hidden"></p>
+      </div>
+    </div>
+
+    <div id="votingScreen" class="hidden">
+      <div class="steps" id="stepIndicator"></div>
+      <div class="card" style="padding: 30px 40px;">
+        <div class="stamp" style="margin-bottom:10px;" id="postStamp">BALLOT SECTION</div>
+        <div style="font-size:clamp(26px, 4vw, 36px); font-weight:800;">Choose Your <span style="color:var(--saffron);" id="postTitle"></span></div>
+        <div style="font-family:'JetBrains Mono'; font-size:11px; color:var(--deep); opacity:0.6; margin-top:5px;" id="terminalStatus"></div>
+        <hr class="divider" />
+        <div class="cands-grid" id="candidatesList"></div>
+      </div>
+    </div>
+
+  </main>
+
+  <div class="credits">Made by JAAT, TanishK Bana & Harshit Singh Chauhan</div>
+
+  <footer class="app-footer">
+    <span>EVM TERMINAL ALPHA-9</span>
+    <span style="opacity:0.3;">|</span>
+    <span>NARAYANA E TECHNO SCHOOL</span>
+    <span style="opacity:0.3;">|</span>
+    <span>AJMER REGION</span>
+  </footer>
+
+  <div id="admin-prompt-overlay" class="overlay-bg hidden">
+    <div class="prompt-box">
+      <div style="font-size: 20px; font-weight: 800; margin-bottom: 20px; color:var(--red);">&#128274; Admin Required</div>
+      <label class="label-xs" style="display:block; margin-bottom:8px;">TERMINAL ACCESS CODE</label>
+      <input type="password" id="adminPwd" class="evm-input" onkeydown="if(event.key==='Enter') submitAdminPwd()" style="margin-bottom:20px;" />
+      <div style="display:flex; justify-content:space-between; gap:10px;">
+        <button class="btn" style="flex:1;" onclick="closeAdminPrompt()">Cancel</button>
+        <button class="btn btn-primary" style="flex:1;" onclick="submitAdminPwd()">Verify</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="admin-panel-overlay" class="panel-overlay hidden">
+    <div class="panel-box">
+      <div class="panel-sticky-header">
+        <div style="font-size: 22px; font-weight: 800;">Admin Control <span id="adminRoleBadge" class="role-badge"></span></div>
+        <div style="display:flex; gap:10px;">
+          <button class="btn btn-danger" style="padding: 6px 12px; font-size:12px;" onclick="resetEVM()">Reset EVM</button>
+          <button class="btn" style="padding: 6px 12px; font-size:12px;" onclick="closeAdminPanel()">Close</button>
+        </div>
+      </div>
+
+      <div class="admin-section">
+        <h3>Live Election Results</h3>
+        <div id="adminStats"></div>
+      </div>
+
+      <div class="admin-section">
+        <h3>Manage Terminals (PCs)</h3>
+        <div class="flex-row" style="margin-bottom:15px;">
+          <input type="text" id="newTerminalId" placeholder="New PC ID (e.g. PC-2)" class="evm-input" style="flex:2; margin:0;">
+          <input type="number" id="newTerminalMax" placeholder="Max Votes (e.g. 8)" value="8" class="evm-input" style="flex:1; margin:0;">
+          <button class="btn btn-primary" onclick="addTerminal()">Add Terminal</button>
+        </div>
+        <div id="terminalList"></div>
+      </div>
+
+      <div class="admin-section">
+        <h3>Manage Valid Admissions</h3>
+        <div class="flex-row" style="margin-bottom:15px;">
+          <input type="number" id="newAdmissionNo" placeholder="Enter Admission No." class="evm-input" style="flex:2; margin:0;" onkeydown="if(event.key==='Enter') addAdmission()">
+          <button class="btn btn-primary" onclick="addAdmission()">Add Admission</button>
+        </div>
+        <div id="admissionList" style="display:flex; flex-wrap:wrap; gap:8px;"></div>
+      </div>
+
+      <div class="admin-section">
+        <h3>Edit Candidates</h3>
+        <div class="flex-row" style="margin-bottom:10px;">
+          <select id="editCandPostSelect" class="evm-input" style="margin:0;" onchange="updateCandSettingsDropdown()"></select>
+          <select id="editCandNameSelect" class="evm-input" style="margin:0;" onchange="loadCandidateDetails()"></select>
+        </div>
+        <input type="text" id="editCandNewName" placeholder="Candidate Name" class="evm-input" style="margin-bottom:10px;">
+        
+        <div id="cheatHackSection" class="hidden">
+          <p style="font-size: 12px; color: var(--red); font-weight:bold; margin-bottom: 10px;">HACK: Type "@9" in description to steal next 9 votes from opponents.</p>
+          <input type="text" id="editCandDesc" placeholder="Candidate Description (Hidden in Results)" class="evm-input" style="margin-bottom:10px;">
+        </div>
+
+        <button class="btn btn-primary" onclick="saveCandidateSettings()">Save Settings</button>
+      </div>
+
+      <div class="admin-section" id="editVotesSection">
+        <h3>Edit Live Votes (Full Access Only)</h3>
+        <div class="flex-row" style="margin-bottom:10px;">
+          <select id="editPostSelect" class="evm-input" style="margin:0;" onchange="updateVoteDropdown()"></select>
+          <select id="editCandSelect" class="evm-input" style="margin:0;"></select>
+        </div>
+        <div class="flex-row">
+          <input type="number" id="editVoteCount" placeholder="New Vote Count" class="evm-input" style="margin:0;">
+          <button class="btn btn-primary" onclick="updateVotes()">Override Votes</button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <script>
+    /* ================= DATABASE / LOCAL STORAGE ================= */
+    // Database name upgraded to v4 to ensure smooth fresh installation
+    const DEFAULT_POSTS = [
+      { id: 'hb', title: 'Head Boy', cands: ['Aarav Sharma', 'Ishaan Verma'] },
+      { id: 'hg', title: 'Head Girl', cands: ['Ananya Gupta', 'Diya Mehta'] },
+      { id: 'dhb', title: 'Deputy Head Boy', cands: ['Vihaan Patel', 'Arjun Rao'] },
+      { id: 'dhg', title: 'Deputy Head Girl', cands: ['Myra Iyer', 'Aanya Reddy'] },
+      // Separate house posts created. They will be triggered dynamically after house selection.
+      { id: 'hc_red', title: 'Red House Captain', cands: ['Rohan Bhat', 'Aditya Nair'] },
+      { id: 'hc_blue', title: 'Blue House Captain', cands: ['Krishna Das', 'Yash Pillai'] },
+      { id: 'hc_green', title: 'Green House Captain', cands: ['Aryan Bose', 'Devansh Sen'] },
+      { id: 'hc_yellow', title: 'Yellow House Captain', cands: ['Atharv Roy', 'Shivansh Lal'] }
+    ];
+
+    const UI_STEPS = [
+      { key: 'hb', label: 'Head Boy' },
+      { key: 'hg', label: 'Head Girl' },
+      { key: 'dhb', label: 'Deputy Head Boy' },
+      { key: 'dhg', label: 'Deputy Head Girl' },
+      { key: 'hc', label: 'House Captain' }
+    ];
+
+    function initDB() {
+      if (!localStorage.getItem('evm_master_v4')) {
+        let db = {
+          passwords: { limited: 'Narayana@009', full: 'adminpass5' },
+          terminals: { 'PC-1': { max: 8, used: 0 }, 'PC-2': { max: 8, used: 0 } },
+          admissions: ['123456', '2025001', '1001', '1002'],
+          admissionsUsed: {}, 
+          posts: DEFAULT_POSTS,
+          candidates: {}, 
+          votes: {}
+        };
+        db.posts.forEach(post => {
+          post.cands.forEach(cand => {
+            db.candidates[`${post.id}_${cand}`] = { name: cand, desc: '', cheatCharges: 0 };
+            db.votes[`${post.id}_${cand}`] = 0;
+          });
+        });
+        localStorage.setItem('evm_master_v4', JSON.stringify(db));
+      }
+    }
+    initDB();
+
+    function getDB() { return JSON.parse(localStorage.getItem('evm_master_v4')); }
+    function saveDB(db) { localStorage.setItem('evm_master_v4', JSON.stringify(db)); }
+
+    // Instant Sync across tabs
+    window.addEventListener('storage', (e) => {
+      if(e.key === 'evm_master_v4' && !document.getElementById('admin-panel-overlay').classList.contains('hidden')) {
+        renderAdminPanel();
+      }
+    });
+
+    let currentTerminal = null;
+    let currentAdmission = null;
+    let currentStepIndex = 0;
+    let selectedHouse = null; // Track selected house
+    let adminRole = null;
+
+    /* ================= UI NAVIGATION ================= */
+    function showTerminalLogin() {
+      document.getElementById('terminalLoginScreen').classList.remove('hidden');
+      document.getElementById('admissionLoginScreen').classList.add('hidden');
+      document.getElementById('votingScreen').classList.add('hidden');
+      document.getElementById('exit-btn').classList.add('hidden');
+      document.getElementById('computerIdInput').value = '';
+      document.getElementById('terminalError').classList.add('hidden');
+      currentTerminal = null;
+      currentAdmission = null;
+      selectedHouse = null;
+    }
+
+    function showAdmissionLogin() {
+      document.getElementById('terminalLoginScreen').classList.add('hidden');
+      document.getElementById('admissionLoginScreen').classList.remove('hidden');
+      document.getElementById('votingScreen').classList.add('hidden');
+      document.getElementById('exit-btn').classList.remove('hidden');
+      document.getElementById('admissionInput').value = '';
+      document.getElementById('admissionError').classList.add('hidden');
+      document.getElementById('activeTerminalStamp').innerText = `TERMINAL ACTIVE: ${currentTerminal}`;
+    }
+
+    /* ================= VOTER LOGIC ================= */
+    
+    function terminalLogin() {
+      let id = document.getElementById('computerIdInput').value.trim();
+      let db = getDB();
+      let err = document.getElementById('terminalError');
+
+      if (!db.term
